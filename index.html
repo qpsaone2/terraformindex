@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terraform 상태 파일(tfstate) 대시보드</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Slate & Sky -->
+    <!-- Application Structure Plan: A single-page application with a fixed sidebar for navigation on desktop and a top dropdown on mobile. The main content area is divided into thematic sections: Core Concepts, Remote State Benefits, Setup Guide, an Interactive Troubleshooter, and Best Practices. This structure was chosen to allow both linear reading and quick, non-linear access to specific information, which is ideal for a technical guide. The interactive troubleshooter directly addresses a key user task: solving common errors efficiently. -->
+    <!-- Visualization & Content Choices: Report Info -> Goal -> Presentation -> Interaction -> Justification. 1. Core Concepts -> Inform -> Text with highlighted keywords -> None -> Establishes foundational knowledge. 2. Remote State Benefits -> Inform/Compare -> Icon-based feature cards -> Hover effects -> Visually engaging and easy to scan benefits. 3. Setup Guide -> Instruct -> Numbered steps with code blocks -> Copy-to-clipboard button -> Provides a clear, actionable guide. 4. Common Errors -> Solve Problems -> Interactive accordion/tab system -> User clicks an error to reveal the solution -> Prevents information overload and allows users to quickly find solutions to their specific problems. 5. Best Practices -> Summarize -> Checklist format -> Interactive checkboxes (visual only) -> Reinforces key takeaways in a digestible format. All diagrams are built with HTML/CSS to adhere to the NO SVG/Mermaid rule. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        .active-nav {
+            background-color: #0ea5e9; /* sky-500 */
+            color: white;
+        }
+        .content-card {
+            background-color: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .content-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -2px rgb(0 0 0 / 0.1);
+        }
+        .code-block {
+            background-color: #1e293b; /* slate-800 */
+            color: #e2e8f0; /* slate-200 */
+            padding: 1rem;
+            border-radius: 0.5rem;
+            position: relative;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .copy-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background-color: #475569; /* slate-600 */
+            color: white;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+        .copy-btn:hover {
+            background-color: #64748b; /* slate-500 */
+        }
+        .troubleshooter-item h3 {
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="text-slate-700">
+
+    <div class="flex flex-col md:flex-row min-h-screen">
+        <!-- Mobile Navigation -->
+        <div class="md:hidden bg-slate-800 text-white p-4">
+            <select id="mobile-nav" class="w-full bg-slate-700 border border-slate-600 rounded-md p-2">
+                <option value="#intro">소개: 상태 파일이란?</option>
+                <option value="#remote-state">원격 상태 관리의 필요성</option>
+                <option value="#setup">Azure Backend 설정 가이드</option>
+                <option value="#troubleshooting">문제 해결사</option>
+                <option value="#best-practices">핵심 모범 사례</option>
+            </select>
+        </div>
+
+        <!-- Sidebar Navigation -->
+        <aside class="hidden md:block w-64 bg-slate-800 text-white flex-shrink-0 p-4 sticky top-0 h-screen">
+            <h1 class="text-2xl font-bold mb-6 border-b border-slate-600 pb-4">Terraform 상태 관리</h1>
+            <nav id="desktop-nav">
+                <ul class="space-y-2">
+                    <li><a href="#intro" class="block py-2 px-4 rounded-md hover:bg-sky-500 hover:text-white transition-colors duration-200">소개: 상태 파일이란?</a></li>
+                    <li><a href="#remote-state" class="block py-2 px-4 rounded-md hover:bg-sky-500 hover:text-white transition-colors duration-200">원격 상태 관리의 필요성</a></li>
+                    <li><a href="#setup" class="block py-2 px-4 rounded-md hover:bg-sky-500 hover:text-white transition-colors duration-200">Azure Backend 설정 가이드</a></li>
+                    <li><a href="#troubleshooting" class="block py-2 px-4 rounded-md hover:bg-sky-500 hover:text-white transition-colors duration-200">문제 해결사</a></li>
+                    <li><a href="#best-practices" class="block py-2 px-4 rounded-md hover:bg-sky-500 hover:text-white transition-colors duration-200">핵심 모범 사례</a></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 p-6 md:p-10">
+            <section id="intro" class="mb-12">
+                <div class="content-card p-8">
+                    <h2 class="text-3xl font-bold text-sky-600 mb-4">1. Terraform 상태 파일(tfstate)이란 무엇인가요?</h2>
+                    <p class="mb-4 text-lg">Terraform 상태 파일은 Terraform이 관리하는 인프라의 **'현재 상태에 대한 진실의 원천(Source of Truth)'**입니다. 이 JSON 형식의 파일은 Terraform 코드로 정의한 리소스가 실제 클라우드 환경에 어떻게 배포되었는지에 대한 모든 정보를 담고 있습니다.</p>
+                    <div class="grid md:grid-cols-2 gap-6 text-slate-600">
+                        <div>
+                            <h3 class="font-bold text-xl mb-2 text-slate-800">주요 목적</h3>
+                            <ul class="list-disc list-inside space-y-2">
+                                <li><strong>리소스 매핑:</strong> 코드와 실제 클라우드 리소스를 연결합니다.</li>
+                                <li><strong>속성 저장:</strong> 배포된 리소스의 모든 속성(ID, IP 주소 등)을 기록합니다.</li>
+                                <li><strong>성능 최적화:</strong> `plan`/`apply` 시 API 호출을 최소화합니다.</li>
+                                <li><strong>의존성 관리:</strong> 리소스 간의 생성/파괴 순서를 관리합니다.</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-xl mb-2 text-slate-800">포함되는 정보</h3>
+                            <ul class="list-disc list-inside space-y-2">
+                                <li>관리 대상 리소스 목록 (⚠️ 민감 정보 포함 가능)</li>
+                                <li>`outputs.tf`에 정의된 출력 값</li>
+                                <li>Terraform 및 프로바이더 버전 메타데이터</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="remote-state" class="mb-12">
+                <div class="content-card p-8">
+                    <h2 class="text-3xl font-bold text-sky-600 mb-4">2. 왜 원격 상태(Remote State)를 사용해야 하나요?</h2>
+                    <p class="mb-6 text-lg">상태 파일을 로컬에 저장하는 것은 개인 프로젝트에서는 가능하지만, 팀 협업 환경에서는 심각한 문제를 야기합니다. 원격 백엔드(Azure Blob Storage 등)를 사용하는 것은 이러한 문제를 해결하기 위한 필수적인 선택입니다.</p>
+                    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="p-6 bg-slate-50 rounded-lg border border-slate-200">
+                            <h3 class="font-bold text-xl mb-2 flex items-center"><span class="text-2xl mr-3">👥</span>협업 용이성</h3>
+                            <p>상태 파일을 중앙에서 공유하여 팀원 간의 작업 동기화를 보장합니다.</p>
+                        </div>
+                        <div class="p-6 bg-slate-50 rounded-lg border border-slate-200">
+                            <h3 class="font-bold text-xl mb-2 flex items-center"><span class="text-2xl mr-3">🔒</span>상태 잠금 (Locking)</h3>
+                            <p>동시에 여러 사용자가 상태 파일을 수정하는 것을 방지하여 데이터 손상을 막습니다.</p>
+                        </div>
+                        <div class="p-6 bg-slate-50 rounded-lg border border-slate-200">
+                            <h3 class="font-bold text-xl mb-2 flex items-center"><span class="text-2xl mr-3">🛡️</span>보안</h3>
+                            <p>민감 정보가 포함될 수 있는 상태 파일을 Git에서 분리하고, 저장/전송 시 암호화합니다.</p>
+                        </div>
+                        <div class="p-6 bg-slate-50 rounded-lg border border-slate-200">
+                            <h3 class="font-bold text-xl mb-2 flex items-center"><span class="text-2xl mr-3">💾</span>내구성 및 신뢰성</h3>
+                            <p>클라우드 스토리지의 높은 내구성으로 로컬 디스크 손상이나 파일 유실 위험을 최소화합니다.</p>
+                        </div>
+                         <div class="p-6 bg-slate-50 rounded-lg border border-slate-200">
+                            <h3 class="font-bold text-xl mb-2 flex items-center"><span class="text-2xl mr-3">🔄</span>버전 관리</h3>
+                            <p>상태 파일의 모든 변경 이력을 추적하고, 필요 시 이전 버전으로 롤백할 수 있습니다.</p>
+                        </div>
+                         <div class="p-6 bg-slate-50 rounded-lg border border-slate-200">
+                            <h3 class="font-bold text-xl mb-2 flex items-center"><span class="text-2xl mr-3">💰</span>비용 효율성</h3>
+                            <p>저렴한 비용으로 강력하고 안정적인 원격 저장소 솔루션을 이용할 수 있습니다.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="setup" class="mb-12">
+                <div class="content-card p-8">
+                    <h2 class="text-3xl font-bold text-sky-600 mb-4">3. Azure Backend 설정 가이드</h2>
+                    <p class="mb-6 text-lg">Terraform 상태 파일을 저장할 Azure Blob Storage 인프라를 준비하고, 코드에 백엔드 설정을 추가하는 과정입니다.</p>
+                    
+                    <div class="mb-6">
+                        <h3 class="font-bold text-xl mb-2">Step 1: 백엔드 인프라 준비 (Azure CLI)</h3>
+                        <p class="mb-4">상태 파일을 저장할 리소스 그룹, 스토리지 계정, 컨테이너를 생성합니다. 이 작업은 일반적으로 한 번만 수행합니다.</p>
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="copyCode(this)">복사</button>
+                            <code>
+# PowerShell/Bash
+$SHARED_STATE_RG="my-shared-tfstate-rg-001"
+$SHARED_STATE_SA="mysharedstateunique0001" # 전역 고유 이름으로 변경
+$CONTAINER_NAME="tfstate-web"
+
+az group create --name $SHARED_STATE_RG --location "koreacentral"
+az storage account create --name $SHARED_STATE_SA --resource-group $SHARED_STATE_RG --sku Standard_LRS
+az storage container create --name $CONTAINER_NAME --account-name $SHARED_STATE_SA
+                            </code>
+                        </div>
+                        <p class="mt-4 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md"><strong>⚠️ 중요:</strong> 생성된 스토리지 계정의 Azure Portal에서 <strong>[데이터 보호] → [Blob 버전 관리 사용]</strong>을 '켜기'로 설정하세요.</p>
+                    </div>
+
+                    <div class="mb-6">
+                        <h3 class="font-bold text-xl mb-2">Step 2: Terraform 코드에 백엔드 설정 추가</h3>
+                        <p class="mb-4">`main.tf` 파일의 `terraform` 블록 내에 `backend` 설정을 추가합니다. `backend` 블록에서는 변수를 사용할 수 없으므로 실제 값을 직접 입력해야 합니다.</p>
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="copyCode(this)">복사</button>
+                            <code>
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "my-shared-tfstate-rg-001"
+    storage_account_name = "mysharedstateunique0001"
+    container_name       = "tfstate-web"
+    key                  = "web-server-project.tfstate"
+  }
+}
+                            </code>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="font-bold text-xl mb-2">Step 3: Terraform 초기화</h3>
+                        <p class="mb-4">백엔드 설정을 추가한 후, `terraform init` 명령을 실행하여 원격 백엔드를 초기화하고 연결합니다. 로컬에 상태 파일이 있다면 원격으로 마이그레이션할지 묻습니다.</p>
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="copyCode(this)">복사</button>
+                            <code>
+terraform init
+                            </code>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="troubleshooting" class="mb-12">
+                <div class="content-card p-8">
+                    <h2 class="text-3xl font-bold text-sky-600 mb-4">4. 문제 해결사 (Interactive Troubleshooter)</h2>
+                    <p class="mb-6 text-lg">실습 중 발생했던 일반적인 오류와 해결 방법을 확인하세요. 오류 메시지를 클릭하면 상세 내용이 나타납니다.</p>
+                    <div id="troubleshooter-container" class="space-y-4">
+                        <!-- Troubleshooter items will be injected here by JavaScript -->
+                    </div>
+                </div>
+            </section>
+
+            <section id="best-practices">
+                <div class="content-card p-8">
+                    <h2 class="text-3xl font-bold text-sky-600 mb-4">5. 핵심 모범 사례 (Best Practices)</h2>
+                    <p class="mb-6 text-lg">안정적이고 효율적인 Terraform 상태 관리를 위한 핵심 원칙들입니다.</p>
+                    <ul class="space-y-4">
+                        <li class="flex items-start">
+                            <span class="text-sky-500 text-2xl mr-3 mt-1">✓</span>
+                            <div>
+                                <h3 class="font-bold text-lg">원격 상태 사용 필수</h3>
+                                <p class="text-slate-600">팀 협업, 보안, 안정성을 위해 항상 Azure Blob Storage와 같은 원격 백엔드를 사용합니다.</p>
+                            </div>
+                        </li>
+                        <li class="flex items-start">
+                            <span class="text-sky-500 text-2xl mr-3 mt-1">✓</span>
+                            <div>
+                                <h3 class="font-bold text-lg">백엔드 인프라 분리</h3>
+                                <p class="text-slate-600">상태 파일을 저장하는 리소스 그룹/스토리지 계정은 관리 대상 인프라와 분리하여 영구적으로 관리해야 합니다. 절대로 동일한 Terraform 프로젝트에서 관리하지 마세요.</p>
+                            </div>
+                        </li>
+                        <li class="flex items-start">
+                            <span class="text-sky-500 text-2xl mr-3 mt-1">✓</span>
+                            <div>
+                                <h3 class="font-bold text-lg">Blob 버전 관리 활성화</h3>
+                                <p class="text-slate-600">상태 파일의 변경 이력을 추적하고 롤백할 수 있도록 스토리지 계정에서 Blob 버전 관리를 활성화합니다.</p>
+                            </div>
+                        </li>
+                        <li class="flex items-start">
+                            <span class="text-sky-500 text-2xl mr-3 mt-1">✓</span>
+                            <div>
+                                <h3 class="font-bold text-lg">`terraform import` 활용</h3>
+                                <p class="text-slate-600">이미 존재하는 Azure 리소스를 Terraform의 관리 대상으로 편입시킬 때 `import` 명령을 올바르게 사용합니다.</p>
+                            </div>
+                        </li>
+                        <li class="flex items-start">
+                            <span class="text-sky-500 text-2xl mr-3 mt-1">✓</span>
+                            <div>
+                                <h3 class="font-bold text-lg">`user_data` 스크립트 디버깅</h3>
+                                <p class="text-slate-600">VM 시작 스크립트 문제 발생 시, VM에 접속하여 `/var/log/cloud-init-output.log`를 확인하여 원인을 진단합니다.</p>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const sections = document.querySelectorAll('main section');
+            const navLinks = document.querySelectorAll('#desktop-nav a');
+            const mobileNav = document.getElementById('mobile-nav');
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const id = entry.target.getAttribute('id');
+                        navLinks.forEach(link => {
+                            link.classList.remove('active-nav');
+                            if (link.getAttribute('href') === `#${id}`) {
+                                link.classList.add('active-nav');
+                            }
+                        });
+                        mobileNav.value = `#${id}`;
+                    }
+                });
+            }, { rootMargin: "-50% 0px -50% 0px" });
+
+            sections.forEach(section => {
+                observer.observe(section);
+            });
+
+            mobileNav.addEventListener('change', (e) => {
+                const targetId = e.target.value;
+                document.querySelector(targetId).scrollIntoView({ behavior: 'smooth' });
+            });
+            
+            const troubleshooterData = [
+                {
+                    error: "Error: Variables not allowed in backend block",
+                    cause: "`backend` 블록은 `terraform init` 시점에 가장 먼저 평가되므로, 아직 로드되지 않은 `var.` 변수를 직접 참조할 수 없습니다.",
+                    solution: "`backend` 블록 내의 값들은 하드코딩(직접 값 입력)하거나, `terraform init` 명령에 `-backend-config` 옵션을 사용하여 전달해야 합니다."
+                },
+                {
+                    error: "Error: A resource with the ID ... already exists",
+                    cause: "Terraform 코드에 정의된 리소스가 Azure에 이미 존재하지만, Terraform의 상태 파일에는 해당 리소스 정보가 없을 때 발생합니다.",
+                    solution: "`terraform import <Resource_Address> <Azure_Resource_ID>` 명령을 사용하여 이미 존재하는 리소스를 Terraform 상태 파일로 가져와야 합니다."
+                },
+                {
+                    error: "terraform destroy가 No changes를 보고하지만 리소스가 남아있음",
+                    cause: "Terraform 상태 파일에 파괴할 리소스 정보가 없기 때문입니다. `apply`가 실패했거나 상태 파일이 실수로 삭제되었을 때 발생합니다.",
+                    solution: "`terraform import`를 사용하여 Azure에 남아있는 모든 리소스를 상태 파일로 다시 가져온 후, `terraform destroy`를 실행합니다. 최후의 수단으로 수동 삭제가 필요할 수 있습니다."
+                },
+                {
+                    error: "VM의 user_data 스크립트 실행 실패 또는 웹 서버 미작동",
+                    cause: "`user_data` 스크립트 자체의 문제(문법, 순서), VM 내부 네트워크 문제, 패키지 설치 실패 등이 원인일 수 있습니다.",
+                    solution: "VM에 SSH로 접속하여 `/var/log/cloud-init-output.log` 파일을 확인하여 오류를 분석합니다. 가장 확실한 방법은 `terraform destroy`로 VM을 삭제하고, 스크립트 수정 후 `terraform apply`로 새로 배포하는 것입니다."
+                },
+                {
+                    error: "file() 함수 오류 (Invalid escape sequence, no file exists)",
+                    cause: "Windows 경로에서 백슬래시(`\\`)를 잘못 사용했거나, 파일이 아닌 폴더를 지정했거나, WSL 환경에서 Windows 경로(`C:/...`)를 직접 사용하여 발생합니다.",
+                    solution: "Windows 경로에서는 슬래시(`/`)를 사용하고, WSL 환경에서는 `/mnt/c/...` 형식으로 경로를 지정합니다. `file()` 함수에는 폴더가 아닌 파일의 정확한 경로를 지정해야 합니다."
+                }
+            ];
+
+            const container = document.getElementById('troubleshooter-container');
+            troubleshooterData.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'troubleshooter-item border border-slate-200 rounded-lg';
+                div.innerHTML = `
+                    <h3 class="font-bold text-lg p-4 bg-slate-100 rounded-t-lg flex justify-between items-center">
+                        <span>${item.error}</span>
+                        <span class="text-sky-500 text-2xl transform transition-transform duration-300">+</span>
+                    </h3>
+                    <div class="troubleshooter-content p-4 border-t border-slate-200 hidden">
+                        <h4 class="font-bold text-slate-800">원인</h4>
+                        <p class="mb-4 text-slate-600">${item.cause}</p>
+                        <h4 class="font-bold text-slate-800">해결책</h4>
+                        <div class="code-block !bg-slate-700 !text-slate-200">
+                           <code>${item.solution}</code>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+
+            container.addEventListener('click', function(e) {
+                const header = e.target.closest('h3');
+                if (header) {
+                    const content = header.nextElementSibling;
+                    const icon = header.querySelector('span:last-child');
+                    const isOpen = !content.classList.contains('hidden');
+
+                    document.querySelectorAll('.troubleshooter-content').forEach(c => c.classList.add('hidden'));
+                    document.querySelectorAll('.troubleshooter-item h3 span:last-child').forEach(i => i.classList.remove('rotate-45'));
+
+                    if (isOpen) {
+                        content.classList.add('hidden');
+                        icon.classList.remove('rotate-45');
+                    } else {
+                        content.classList.remove('hidden');
+                        icon.classList.add('rotate-45');
+                    }
+                }
+            });
+        });
+
+        function copyCode(button) {
+            const codeElement = button.nextElementSibling;
+            const textToCopy = codeElement.innerText;
+            
+            // Create a temporary textarea element to copy the text
+            const textArea = document.createElement('textarea');
+            textArea.value = textToCopy;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                button.innerText = '복사 완료!';
+                setTimeout(() => {
+                    button.innerText = '복사';
+                }, 2000);
+            } catch (err) {
+                console.error('Failed to copy text: ', err);
+                button.innerText = '복사 실패';
+                 setTimeout(() => {
+                    button.innerText = '복사';
+                }, 2000);
+            }
+            document.body.removeChild(textArea);
+        }
+    </script>
+</body>
+</html>
